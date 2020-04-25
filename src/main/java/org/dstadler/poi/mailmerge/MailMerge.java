@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.logging.Logger;
 
 import com.google.common.base.Preconditions;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.xmlbeans.XmlException;
@@ -57,21 +58,29 @@ public class MailMerge {
         Data data = new Data();
         data.read(dataFile);
 
-        // now open the word file and apply the changes
-        try (InputStream is = new FileInputStream(wordTemplate)) {
-            try (XWPFDocument doc = new XWPFDocument(is)) {
-                // apply the lines and concatenate the results into the document
-                applyLines(data, doc);
+        List<String> headers = data.getHeaders();
+        for (List<String> dataRow : data.getData()) {
+            // now open the word file and apply the changes
+            try (InputStream is = new FileInputStream(wordTemplate)) {
+                try (XWPFDocument doc = new XWPFDocument(is)) {
 
-                log.info("Writing overall result to " + outputFile);
-                try (OutputStream out = new FileOutputStream(outputFile)) {
-                    doc.write(out);
+                    applyLines(headers, dataRow, doc);
+
+                    String newOutputFileName =
+                            FilenameUtils.removeExtension(outputFile) + "_" + dataRow.get(0) + ".docx";
+
+                    log.info("Writing overall result to " + newOutputFileName);
+                    try (OutputStream out = new FileOutputStream(newOutputFileName)) {
+
+                        doc.write(out);
+                    }
                 }
             }
         }
     }
 
-    private void applyLines(Data dataIn, XWPFDocument doc) throws XmlException, IOException {
+    private void applyLines(List<String> headers, List<String> data, XWPFDocument doc) throws XmlException, IOException {
+
         // small hack to not having to rework the commandline parsing just now
         String includeIndicator = System.getProperty("org.dstadler.poi.mailmerge.includeindicator");
 
@@ -82,51 +91,48 @@ public class MailMerge {
 
         // apply the replacements line-by-line
         boolean first = true;
-        List<String> headers = dataIn.getHeaders();
-        for(List<String> data : dataIn.getData()) {
-            log.info("Applying to template: " + data);
+        log.info("Applying to template: " + data);
 
-            // if the option is set ignore lines which do not have the indicator set
-            if(includeIndicator != null) {
-                int indicatorPos = headers.indexOf(includeIndicator);
-                Preconditions.checkState(indicatorPos >= 0,
-                        "An include-indicator is set via system properties as %s, but there is no such column, had: %s",
-                        includeIndicator, headers);
+        // if the option is set ignore lines which do not have the indicator set
+        if(includeIndicator != null) {
+            int indicatorPos = headers.indexOf(includeIndicator);
+            Preconditions.checkState(indicatorPos >= 0,
+                    "An include-indicator is set via system properties as %s, but there is no such column, had: %s",
+                    includeIndicator, headers);
 
-                if(!StringUtils.equalsAnyIgnoreCase(data.get(indicatorPos), "1", "true")) {
-                    log.info("Skipping line " + data + " because include-indicator was not set");
-                    continue;
-                }
+            if(!StringUtils.equalsAnyIgnoreCase(data.get(indicatorPos), "1", "true")) {
+                log.info("Skipping line " + data + " because include-indicator was not set");
             }
-
-            String replaced = srcString;
-            for(int fieldNr = 0;fieldNr < headers.size();fieldNr++) {
-                String header = headers.get(fieldNr);
-                String value = data.get(fieldNr);
-
-                // ignore columns without headers as we cannot match them
-                if(header == null) {
-                    continue;
-                }
-
-                // use empty string for data-cells that have no value
-                if(value == null) {
-                    value = "";
-                }
-
-                replaced = replaced.replace("${" + header + "}", value);
-            }
-
-            // check for missed replacements or formatting which interferes
-            if(replaced.contains("${")) {
-                log.warning("Still found template-marker after doing replacement: " +
-                        StringUtils.abbreviate(StringUtils.substring(replaced, replaced.indexOf("${")), 200));
-            }
-
-            appendBody(body, replaced, first);
-
-            first = false;
         }
+
+        String replaced = srcString;
+        for(int fieldNr = 0;fieldNr < headers.size();fieldNr++) {
+            String header = headers.get(fieldNr);
+            String value = data.get(fieldNr);
+
+            // ignore columns without headers as we cannot match them
+            if(header == null) {
+                continue;
+            }
+
+            // use empty string for data-cells that have no value
+            if(value == null) {
+                value = "";
+            }
+
+            replaced = replaced.replace("${" + header + "}", value.toUpperCase());
+        }
+
+        // check for missed replacements or formatting which interferes
+        if(replaced.contains("${")) {
+            log.warning("Still found template-marker after doing replacement: " +
+                    StringUtils.abbreviate(StringUtils.substring(replaced, replaced.indexOf("${")), 200));
+        }
+
+        appendBody(body, replaced, first);
+
+        first = false;
+
     }
 
     private static void appendBody(CTBody src, String append, boolean first) throws XmlException {
