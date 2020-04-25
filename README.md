@@ -1,5 +1,10 @@
 [![Build Status](https://travis-ci.org/centic9/poi-mail-merge.svg)](https://travis-ci.org/centic9/poi-mail-merge) [![Gradle Status](https://gradleupdate.appspot.com/centic9/poi-mail-merge/status.svg?branch=master)](https://gradleupdate.appspot.com/centic9/poi-mail-merge/status)
 
+**This is a modified version which outputs the results in separate "docx"
+documents, one for each row in the xlsx or csv file. The filenames are 
+adjusted to have the first value appended to the end to better differentiate 
+the results.**
+
 This is a small application which allows to repeatedly replace markers
 in a Microsoft Word document with items taken from a CSV/Microsoft Excel 
 file. 
